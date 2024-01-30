@@ -1,6 +1,6 @@
 # DataMining HDT
 ## Acerca de
-Repositorio para resolver hojas de trabajo.
+Repositorio para resolución de hojas de trabajo.
 ## Integrantes
 * Brian Carrillo
 * Carlos López
