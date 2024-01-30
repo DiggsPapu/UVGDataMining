@@ -164,3 +164,68 @@ movies <- read.csv("movies.csv")
   # Ver los directores de estas películas
   View(top_20_movies)
 
+
+
+#5.2 Pregunta extra, ¿qué tanto afecta la presencia o no de videos publicitarios y/o promocionales en la popularidad de la pelicula?
+
+  movies %>% 
+  group_by(video) %>% 
+  summarize(average_popularity = mean(popularity, na.rm = TRUE)) %>% 
+  ggplot(aes(x = video, y = average_popularity)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Promedio de Popularidad en Películas con y sin Videos Promocionales", x = "Videos Promocionales", y = "Promedio de Popularidad")
+
+
+
+#5.3 Pregunta extra, ¿qué tanto afecta la presencia o no de videos publicitarios y/o promocionales en la popularidad de la pelicula?
+
+  movies %>% 
+  group_by(video) %>% 
+  summarize(average_popularity = mean(popularity, na.rm = TRUE)) %>% 
+  ggplot(aes(x = video, y = average_popularity)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Promedio de Popularidad en Películas con y sin Videos Promocionales", x = "Videos Promocionales", y = "Promedio de Popularidad")
+
+
+
+#5.4 Pregunta extra, ¿qué tanto influye la cantidad de generos en los ingresos que genera la pelicula?
+
+
+  movies %>% 
+  mutate(num_genres = str_count(genres, pattern = ",") + 1) %>% 
+  group_by(num_genres) %>% 
+  summarize(average_revenue = mean(revenue, na.rm = TRUE), 
+            average_popularity = mean(popularity, na.rm = TRUE)) %>% 
+  ggplot(aes(x = num_genres)) +
+  geom_line(aes(y = average_revenue, colour = "Ingresos")) +
+  geom_line(aes(y = average_popularity, colour = "Popularidad")) +
+  labs(title = "Ingresos y Popularidad según la Cantidad de Géneros de la Película", x = "Número de Géneros", y = "Promedio")
+
+#5.5 Pregunta extra, ¿Que géneros o combinaciones de estos son más comunes en las películas?
+
+  movies %>%
+  group_by(genres) %>%
+  summarize(frequency = n()) %>%
+  top_n(10, frequency) %>%
+  ggplot(aes(x = reorder(genres, frequency), y = frequency)) +
+  geom_bar(stat = "identity", fill = "green") +
+  coord_flip() +
+  labs(title = "Top 10 Generos o Combinaciones de Géneros Más Comunes en Películas", 
+       x = "Combinaciones de Géneros", 
+       y = "Frecuencia") +
+  theme_minimal()
+
+#5.6 Pregunta extra, ¿Existe una tendencia en la duracion de las peliculas a lo largo de los años?
+
+  movies %>%
+  mutate(year = year(ymd(releaseDate))) %>%
+  group_by(year) %>%
+  summarize(average_runtime = mean(runtime, na.rm = TRUE)) %>%
+  ggplot(aes(x = year, y = average_runtime)) +
+  geom_line(color = "blue") +
+  labs(title = "Tendencia de la Duración de las Películas a lo Largo de los Años", 
+       x = "Año", 
+       y = "Duración Promedio (minutos)") +
+  theme_minimal()
+
+
