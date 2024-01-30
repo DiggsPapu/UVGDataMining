@@ -1,6 +1,6 @@
-# HDT1
+# DataMining HDT
 ## ¿De qué es?
-Repositorio para resolver la hoja de trabajo 1, se trata sobre análisis exploratorio.
+Repositorio para resolver hojas de trabajo.
 ## Integrantes
 * Brian Carrillo
 * Carlos López
