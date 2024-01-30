@@ -1,5 +1,5 @@
 # DataMining HDT
-## ¿De qué es?
+## Acerca de
 Repositorio para resolver hojas de trabajo.
 ## Integrantes
 * Brian Carrillo
