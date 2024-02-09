@@ -1,4 +1,6 @@
-setwd('D:/UVG/CODING/Semestre7/MineriaDeDatos/HDT/HDT2')
+#setwd('D:/UVG/CODING/Semestre7/MineriaDeDatos/HDT/HDT2')
+setwd('/media/sf_D_DRIVE/UVG/CODING/Semestre7/MineriaDeDatos/HDT/HDT2')
+getwd()
 movies<-read.csv("./movies.csv")
 # Preprocesamiento
 View(movies)
