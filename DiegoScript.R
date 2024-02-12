@@ -8,6 +8,7 @@ library(hopkins) #Para revisar si vale la pena hacer agrupamiento
 library(GGally) #Para hacer el conjunto de graficos
 library(FeatureImpCluster) #Para revisar la importancia de las variables en los grupos.
 library(pheatmap) #Para hacer mapa de calor
+library(ggrepel)
 setwd('D:/UVG/CODING/Semestre7/MineriaDeDatos/HDT/HDT2')
 #setwd('/media/sf_D_DRIVE/UVG/CODING/Semestre7/MineriaDeDatos/HDT/HDT2')
 getwd()
@@ -57,3 +58,22 @@ fviz_nbclust(movies[columns], kmeans,
 ## Resumen de diversas estadísticas
 nb <- NbClust(movies[columns], distance = "euclidean", min.nc = 2,
               max.nc = 10, method = "complete", index ="all")
+
+# Clustering
+## KMeans
+km<-kmeans(movies[,columns],2,iter.max =100)
+km
+### Ploteo
+plotcluster(movies[,columns],km$cluster) #grafica la ubicaciÃ³n de los clusters
+fviz_cluster(km, data = movies[,columns],geom = "point", ellipse.type = "norm")
+### Cardinalidad de los grupos
+km$size
+### Variabilidad intragrupo
+km$withinss
+### Cardinalidad vs variabilidad intragrupo-Detección de grupos anómalos
+m<-data.frame(withinss=km$withinss, size=km$size)
+ggplot(m, aes(size,withinss))+
+  geom_point()+
+  geom_smooth(method="lm")+
+  labs(x="cardinalidad (size)",y="magnitud (whithinss)")+
+  geom_text_repel(label=rownames(m))
