@@ -47,4 +47,67 @@ labs(subtitle = "Gap statistic method")
 nb <- NbClust(movies[,columns], distance = "euclidean", min.nc = 2, max.nc = 10, method = "complete", index ="all")
 
 #Agrupamiento
+## KMeans
+km<-kmeans(movies[,columns],2,iter.max =100)
+km
 
+km<-kmeans(movies[,columns],7,iter.max =100)
+km
+
+km<-kmeans(movies[,columns],10,iter.max =100)
+km
+
+### Ploteo
+plotcluster(movies[,columns],km$cluster) #grafica la ubicaciÃ³n de los clusters
+fviz_cluster(km, data = movies[,columns],geom = "point", ellipse.type = "norm")
+### Cardinalidad de los grupos
+km$size
+### Variabilidad intragrupo
+km$withinss
+### Cardinalidad vs variabilidad intragrupo-Detección de grupos anómalos
+m<-data.frame(withinss=km$withinss, size=km$size)
+ggplot(m, aes(size,withinss))+
+  geom_point()+
+  geom_smooth(method="lm")+
+  labs(x="cardinalidad (size)",y="magnitud (whithinss)")+
+  geom_text_repel(label=rownames(m))
+
+#Clustering Jerarquico
+movies_dist <- dist(movies[, columns])
+hc <- hclust(movies_dist, method = "ward.D2")
+plot(hc, cex=0.5, axes=FALSE)
+rect.hclust(hc, k=2)
+
+fviz_dend(hc, k=2, rect = TRUE, cex = 0.5)
+
+groups <- cutree(hc, k=2)
+movies$gruposHC <- groups
+
+#tamanio de los grupos
+table(movies$gruposHC)
+#medida de variables
+by(movies[, columns], movies$gruposHC, colMeans)
+
+#Evalucaion de la calidad por el metodo de la silueta
+silhc <- silhouette(groups, movies_dist)
+mean(silhc[,3])
+
+#silueta de cada cluster
+plot(silhc, cex.names=0.4, col=1:3)
+
+#dendograma radial
+set.seed(123)
+fviz_dend(hc, k=3, cex = 0.4, type = "circular", color_labels_by_k = TRUE)
+
+#Filogénica
+fviz_dend(hc, k=2, color_labels_by_k = T, cex = .7,type = "phylogenic", repel = T)
+
+#mapa de calor
+heatmap(movies[,columns],cluster_cols = F, scale = "none",cutree_rows = 3, fontsize = 6, clustering_distance_rows = "euclidean",clustering_method = "ward.D2")
+
+#calidad del agrupamiento hecho por cada algoritmo con el método de la silueta
+silhc<-silhouette(groups,datos_dist)
+mean(silhc[,3])
+
+#grafico de cada cluster
+plot(silhc, cex.names=.4, col=1:3)
