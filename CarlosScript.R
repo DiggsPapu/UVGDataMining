@@ -95,6 +95,26 @@ table(movies$gruposHC)
 #medida de variables
 by(movies[, columns], movies$gruposHC, colMeans)
 
+#Evalucaion de la calidad por el metodo de la silueta
+silhc <- silhouette(groups, movies_dist)
+mean(silhc[,3])
 
+#silueta de cada cluster
+plot(silhc, cex.names=0.4, col=1:3)
 
+#dendograma radial
+set.seed(123)
+fviz_dend(hc, k=3, cex = 0.4, type = "circular", color_labels_by_k = TRUE)
 
+#Filogénica
+fviz_dend(hc, k=2, color_labels_by_k = T, cex = .7,type = "phylogenic", repel = T)
+
+#mapa de calor
+heatmap(movies[,columns],cluster_cols = F, scale = "none",cutree_rows = 3, fontsize = 6, clustering_distance_rows = "euclidean",clustering_method = "ward.D2")
+
+#calidad del agrupamiento hecho por cada algoritmo con el método de la silueta
+silhc<-silhouette(groups,datos_dist)
+mean(silhc[,3])
+
+#grafico de cada cluster
+plot(silhc, cex.names=.4, col=1:3)
