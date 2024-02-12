@@ -29,3 +29,22 @@ hopkins(movies[,columns])
 
 movies_dist<- dist(movies[,columns])
 fviz_dist(movies_dist, show_labels = F)
+
+#¿Cuál es el número de grupos?
+#Metodo de codo
+fviz_nbclust(movies[,columns], kmeans, method = "wss") +
+labs(subtitle = "Elbow method")
+
+#Metodo de la silueta
+fviz_nbclust(movies[,columns], kmeans, method = "silhouette") +
+labs(subtitle = "Silhouette method")
+
+#Metodo de Gap
+fviz_nbclust(movies[,columns], kmeans, nstart = 25, method = "gap_stat", nboot = 50, verbose = F)+
+labs(subtitle = "Gap statistic method")
+
+#NbClusts
+nb <- NbClust(movies[,columns], distance = "euclidean", min.nc = 2, max.nc = 10, method = "complete", index ="all")
+
+#Agrupamiento
+
