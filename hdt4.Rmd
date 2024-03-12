@@ -1,0 +1,145 @@
+---
+title: "HDT4"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+Importación de librerías y asignación del working directory.
+```{r}
+install.packages("tree")
+install.packages("magrittr")
+
+library(rpart)
+library(caret)
+library(tree)
+library(rpart.plot)
+library(randomForest)
+library(dplyr)
+```
+Preprocesamiento: [Ver HDT3]
+```{r}
+train2
+columns <- c(sapply(train2, is.numeric))
+trainHDT4 <- train2[,columns]
+
+trainHDT4<-trainHDT4[complete.cases(trainHDT4), ]
+
+# Calcula la media y la desviación estándar
+media <- mean(trainHDT4$SalePrice)
+desvEst <- sd(trainHDT4$SalePrice)
+
+# Número de desviaciones estándar para considerar
+nDesvEst <- 1
+
+# Filtra los datos para eliminar atípicos
+trainHDT4 <- trainHDT4 %>% 
+  filter(SalePrice >= (media - nDesvEst * desvEst) & SalePrice <= (media + nDesvEst * desvEst))
+
+corte <- sample(nrow(trainHDT4),nrow(trainHDT4)*0.7)
+train_copy<-trainHDT4[corte,]
+test_copy<-trainHDT4[-corte,]
+
+train_copy<-as.data.frame(scale(train_copy))
+test_copy<-as.data.frame(scale(test_copy))
+```
+Árbol de regresión
+Dato a predecir: SalesPrice
+Predictores: El resto de variables
+```{r}
+### Predecir precio de venta usando todas las variables
+arbolModelo<-rpart(SalePrice~.,train_copy,method = "anova",control = rpart.control(maxdepth = 5))
+rpart.plot(arbolModelo)
+```
+Pruebas de prediccion
+```{r}
+prediccion <- predict(arbolModelo, newdata = test_copy)
+mse <- mean((prediccion - test_copy$SalePrice)^2)
+rmse <- sqrt(mse)
+
+# Calcula la media de los valores observados
+media <- mean(test_copy$SalePrice)
+
+# Calcula R^2 manualmente
+R2 <- 1 - sum((test_copy$SalePrice - prediccion)^2) / sum((test_copy$SalePrice - media)^2)
+
+#MSE
+mse
+#RMSE
+rmse
+#R^2
+R2
+```
+Variable de respuesta
+```{r}
+summary(trainHDT4$SalePrice)
+boxplot(trainHDT4$SalePrice, main = "Boxplot de SalePrice", ylab = "SalePrice")
+```
+Agregando variable de respuesta
+```{r}
+trainHDT4$Category <- ifelse(trainHDT4$SalePrice <= 137500, "Economica",
+                           ifelse(trainHDT4$SalePrice <= 196875, "Intermedia", "Cara"))
+trainHDT4 <- trainHDT4[, -which(names(trainHDT4) == "SalePrice")]
+
+corte <- sample(nrow(trainHDT4),nrow(trainHDT4)*0.7)
+train_copy<-trainHDT4[corte,]
+test_copy<-trainHDT4[-corte,]
+```
+
+Árbol de decisión
+```{r}
+### Predecir precio de venta usando todas las variables
+arbolModelo2<-rpart(Category~.,train_copy,method = "class")
+rpart.plot(arbolModelo2)
+```
+Pruebas de prediccion
+```{r}
+prediccion <- predict(arbolModelo2, newdata = test_copy)
+#Apply: Para cada fila, determina el nombre de la columna del valor máximo entre los tres valores de una fila
+columnaMasAlta<-apply(prediccion, 1, function(x) colnames(prediccion)[which.max(x)])
+test_copy$prediccion<-columnaMasAlta #Se le añade al grupo de prueba el valor de la predicción
+```
+Matriz de confusion
+```{r}
+cfm<-confusionMatrix(as.factor(test_copy$prediccion),as.factor(test_copy$Category))
+cfm
+```
+Validación cruzada
+```{r}
+ct<-trainControl(method = "cv",number=10, verboseIter=T)
+modelorf<-train(Category~.,data=train_copy,method="rpart",trControl = ct)
+prediccionADVC<-predict(modelorf,newdata = test_copy)
+test_copy$predADVC<-prediccionADVC
+cfmCaret <- confusionMatrix(as.factor(test_copy$predADVC),as.factor(test_copy$Category))
+cfmCaret
+```
+Diferentes profundidades
+```{r}
+### Predecir precio de venta usando todas las variables
+arbolModelo2<-rpart(Category~.,train_copy,method = "class",control = rpart.control(maxdepth = 5))
+rpart.plot(arbolModelo2)
+```
+Pruebas de prediccion
+```{r}
+prediccion <- predict(arbolModelo2, newdata = test_copy)
+#Apply: Para cada fila, determina el nombre de la columna del valor máximo entre los tres valores de una fila
+columnaMasAlta<-apply(prediccion, 1, function(x) colnames(prediccion)[which.max(x)])
+test_copy$prediccion<-columnaMasAlta #Se le añade al grupo de prueba el valor de la predicción
+```
+Matriz de confusion
+```{r}
+cfm<-confusionMatrix(as.factor(test_copy$prediccion),as.factor(test_copy$Category))
+cfm
+```
+Random Forest
+Matriz de confusion
+```{r}
+train_copy$Category <- as.factor(train_copy$Category)
+modeloRF1<-randomForest(Category~.,data=train_copy)
+prediccionRF1<-predict(modeloRF1,newdata = test_copy)
+testCompleto<-test_copy
+testCompleto$predRF<-prediccionRF1
+cfmRandomForest <- confusionMatrix(as.factor(testCompleto$predRF), as.factor(testCompleto$Category))
+cfmRandomForest
+```
