@@ -1,0 +1,473 @@
+---
+title: "Regresion Lineal"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+# DIVISION DE DATOS EN TRAIN Y PRUEBA
+```{r}
+## Version sin normalizar
+corte <- sample(nrow(train2),nrow(train2)*0.7)
+train_copy<-train2[corte,]
+test_copy<-train2[-corte,]
+```
+
+
+```{r}
+columns <- c(sapply(train_copy, is.numeric))
+train_copy<-train_copy[,c(sapply(train_copy, is.numeric))]
+test_copy<-test_copy[,c(sapply(test_copy, is.numeric))]
+```
+
+```{r}
+### Normalizacion
+train_copy<-as.data.frame(scale(train_copy))
+test_copy<-as.data.frame(scale(test_copy))
+```
+
+```{r}
+train_copy<-train_copy[complete.cases(train_copy), ]
+test_copy<-test_copy[complete.cases(test_copy), ]
+```
+
+```{r}
+train_copy[is.na(columns),]
+```
+
+
+```{r}
+test_copy[is.na(columns),]
+```
+
+
+
+```{r}
+nrow(train_copy)
+nrow(test_copy)
+```
+
+```{r}
+## Ingeniería de características
+cor(train_copy[, sapply(train_copy, is.numeric)], train_copy$SalePrice)
+```
+# REGRESION LINEAL SIMPLE
+
+```{r}
+#### Regresion lineal simple sin normalizar 
+SNS_Model<-lm(train_copy$SalePrice~train_copy$GrLivArea, data = train_copy)
+#### Resumen
+summary(SNS_Model)
+plot(SNS_Model)
+```
+
+```{r}
+w <- abs(rstudent(SNS_Model)) < 3 & abs(cooks.distance(SNS_Model)) < 4/nrow(SNS_Model$model)
+SNS_Model <- update(SNS_Model, weights=as.numeric(w))
+plot(SNS_Model)
+```
+
+```{r}
+#### Gráfica
+ggplot(data = train_copy, mapping = aes(x = train_copy$GrLivArea, y = train_copy$SalePrice)) +
+geom_point(color = "firebrick", size = 2) +
+geom_smooth(method = "lm", se = TRUE, color = "black") +
+labs(title = "GrLivArea ~ SalePrice (Sin Normalizar)", x = "GrLivArea", y = "SalePrice") +
+theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+```
+```{r}
+#### Residuos
+pSNS_Model<-predict(SNS_Model, newdata = test_copy)
+head(pSNS_Model)
+length(pSNS_Model)
+plot(pSNS_Model)
+```
+
+
+```{r}
+hist(SNS_Model$residuals)
+boxplot(SNS_Model$residuals)
+qqnorm(SNS_Model$residuals)
+qqline(SNS_Model$residuals, col="red")
+lillie.test(SNS_Model$residuals)
+```
+
+
+```{r}
+RMSE(pSNS_Model,test_copy$SalePrice)
+plot(test_copy$SalePrice,col="blue", main="Predicciones test vs valores originales")
+points(pSNS_Model, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+```
+```{r}
+test_sns <- mean((pSNS_Model - test_copy$SalePrice)^2)
+(test_sns)^0.5
+```
+
+## REGRESION LINEAL MULTIVARIADA
+```{r}
+#### Regresion lineal Multiple sin normalizar 
+SNM_Model<-lm(train_copy$SalePrice~., data = train_copy)
+#### Resumen
+summary(SNM_Model)
+plot(SNM_Model)
+```
+
+```{r}
+w <- abs(rstudent(SNM_Model)) < 3 & abs(cooks.distance(SNM_Model)) < 4/nrow(SNM_Model$model)
+SNM_Model <- update(SNM_Model, weights=as.numeric(w))
+summary(SNM_Model)
+plot(SNM_Model)
+```
+
+```{r}
+## Detección de autocorrelación debe ser mayor que 0.05
+durbinWatsonTest(SNM_Model)
+```
+
+
+```{r}
+test_copy[is.na(columns),]
+test_copy[!complete.cases(test_copy),]
+```
+
+```{r}
+#### Residuos
+pSNM_Model<-predict(SNM_Model, newdata = test_copy)
+head(pSNM_Model)
+length(pSNM_Model)
+plot(pSNM_Model)
+```
+
+```{r}
+# Calculate the mean squared error for the filtered data
+training_snmm <- mean((pSNM_Model - test_copy$SalePrice)^2)
+(training_snmm)^0.5
+```
+
+
+```{r}
+hist(SNM_Model$residuals)
+boxplot(SNM_Model$residuals)
+qqnorm(SNM_Model$residuals)
+qqline(SNM_Model$residuals, col="red")
+lillie.test(SNM_Model$residuals)
+```
+
+
+```{r}
+#ggsave("pair_plot.pdf", ggpairs(train[, sapply(train, is.numeric)]))
+```
+
+
+
+```{r}
+pSNM_Model2 <- predict (SNM_Model, newdata = train_copy)
+plot(test_copy$SalePrice,col="blue", main="Predicciones Train vs valores originales")
+points(pSNM_Model, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+```
+
+```{r}
+plot(test_copy$SalePrice,col="blue", main="Predicciones test vs valores originales")
+points(pSNM_Model, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+RMSE(pSNM_Model,test_copy$SalePrice)
+```
+# SELECCION DE PREDICTORES
+```{r}
+SNMM_Model <- step(
+  object    = lm(formula = SalePrice ~ ., data = train_copy),
+  direction = "backward",
+  scope     = list(upper = ~., lower = ~1),
+  trace     = TRUE
+)
+```
+
+
+```{r}
+summary(SNMM_Model)
+plot(SNMM_Model)
+```
+
+```{r}
+w <- abs(rstudent(SNMM_Model)) < 3 & abs(cooks.distance(SNMM_Model)) < 4/nrow(SNMM_Model$model)
+SNMM_Model <- update(SNMM_Model, weights=as.numeric(w))
+plot(SNMM_Model)
+```
+
+```{r}
+## Detección de autocorrelación debe ser mayor que 0.05
+durbinWatsonTest(SNMM_Model)
+```
+
+```{r}
+lillie.test(SNMM_Model$residuals)
+```
+
+
+```{r}
+pSNMM_Model <- predict(SNMM_Model, newdata =  train_copy[, sapply(train_copy, is.numeric)])
+tSNMM_Model <- predict(SNMM_Model, newdata =  test_copy[, sapply(test_copy, is.numeric)])
+```
+
+
+```{r}
+# Calculate the mean squared error for the filtered data
+training_snmm <- mean((pSNMM_Model- train_copy$SalePrice)^2)
+training_snmm
+```
+
+
+```{r}
+# Calculate the mean squared error for the filtered data
+test_mse_snmm <- mean((tSNMM_Model - test_copy$SalePrice)^2)
+test_mse_snmm
+```
+```{r}
+plot(test_copy$SalePrice,col="blue", main="Predicciones test vs valores originales")
+points(tSNMM_Model, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+```
+#Ridge
+```{r}
+x_train <- model.matrix(SalePrice~., data = train_copy)[, -1]
+dim(x_train)
+y_train <- train_copy$SalePrice
+length(y_train)
+```
+
+
+```{r}
+x_test <- model.matrix(SalePrice~., data = test_copy)[, -1]
+y_test <- test_copy$SalePrice
+```
+
+
+```{r}
+dim(x_test)
+dim(x_train)
+```
+
+```{r}
+modelo3 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 0,
+            nlambda     = 100,
+            standardize = TRUE
+          )
+
+regularizacion <- modelo3$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = modelo3$lambda)
+
+regularizacion <- regularizacion %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+```
+
+
+```{r}
+plot(modelo3)
+```
+
+```{r}
+regularizacion %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor)) +
+  geom_line() +
+  labs(title = "Coeficientes del modelo en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+cv_error <- cv.glmnet(
+              x      = x_train,
+              y      = y_train,
+              alpha  = 0,
+              nfolds = 10,
+              type.measure = "mse",
+              standardize  = TRUE
+           )
+
+plot(cv_error)
+```
+
+
+```{r}
+modelo3 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 0,
+            lambda      = cv_error$lambda.1se,
+            standardize = TRUE
+          )
+```
+
+
+```{r}
+coef(modelo3)
+```
+
+
+```{r}
+# Predicciones de entrenamiento
+
+predicciones_train_modelo3<- predict(modelo3, newx = x_train)
+predicciones_test_modelo3 <- predict(modelo3, newx = x_test)
+
+# MSE de test
+test_mse_ridge_modelo3 <- mean((predicciones_test_modelo3 - y_test)^2)
+
+# MSE de entrenamiento
+training_mse_ridge_modelo3 <- mean((predicciones_train_modelo3 - y_train)^2)
+RMSE(predicciones_train_modelo3,train_copy$SalePrice)
+RMSE(predicciones_test_modelo3,test_copy$SalePrice)
+test_mse_ridge_modelo3
+training_mse_ridge_modelo3
+```
+
+```{r}
+plot(test_copy$SalePrice,col="blue", main="Predicciones vs valores originales")
+points(predicciones_test_modelo3, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+```
+
+
+#Lasso
+```{r}
+modelo4 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 1,
+            nlambda     = 100,
+            standardize = TRUE
+          )
+
+regularizacion <- modelo4$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = modelo4$lambda)
+
+regularizacion <- regularizacion %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+```
+
+
+```{r}
+regularizacion %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor)) +
+  geom_line() +
+  labs(title = "Coeficientes del modelo en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+cv_error <- cv.glmnet(
+              x      = x_train,
+              y      = y_train,
+              alpha  = 1,
+              nfolds = 10,
+              type.measure = "mse",
+              standardize  = TRUE
+           )
+
+plot(cv_error)
+```
+
+
+```{r}
+modelo4 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 1,
+            lambda      = cv_error$lambda.1se,
+            standardize = TRUE
+          )
+coef(modelo4)
+```
+
+
+```{r}
+# Predicciones de entrenamiento
+predicciones_train_modelo4<- predict(modelo4, newx = x_train)
+
+
+predicciones_test_modelo4 <- predict(modelo4, newx = x_test)
+
+# MSE de test
+test_mse_lasso_modelo4 <- mean((predicciones_test_modelo4 - y_test)^2)
+
+# MSE de entrenamiento
+training_mse_lasso_modelo4 <- mean((predicciones_train_modelo4 - y_train)^2)
+RMSE(predicciones_train_modelo4, train_copy$SalePrice)
+RMSE(predicciones_test_modelo4, test_copy$SalePrice)
+test_mse_lasso_modelo4
+training_mse_lasso_modelo4
+```
+
+```{r}
+plot(test_copy$SalePrice,col="blue", main="Predicciones vs valores originales")
+points(predicciones_test_modelo4, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+```
+
+
+```{r}
+df_comparacion <- data.frame(
+                    modelo = c("Simple","Multivariada", "Predictores_seleccionados", "Ridge", "Lasso"),
+                    mse    = c(test_sns,training_snmm,test_mse_snmm,test_mse_ridge_modelo3,test_mse_lasso_modelo4)
+)
+
+ggplot(data = df_comparacion, aes(x = modelo, y = mse)) +
+  geom_col(width = 0.5) +
+  geom_text(aes(label = round(mse, 2)), vjust = -0.1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+#ara calcular el AIC en modelos glmnet
+fit = modelo3
+glmnet_cv_aicc <- function(fit, lambda = 'lambda.1se'){
+  tLL <- fit$nulldev - deviance(fit)
+  k <- fit$df
+  n <- fit$nobs
+  AICc <- -tLL+2*k+2*k*(k+1)/(n-k-1)
+  list('AICc' = AICc,'BIC' = log(n) * k - tLL)
+}
+aicM1<-AIC(SNM_Model)
+aicM2<-AIC(SNMM_Model)
+aic_bicM3<-glmnet_cv_aicc(modelo3)
+aic_bicM4<-glmnet_cv_aicc(modelo4)
+
+dfMetricas<-data.frame(
+  c("Modelo Lineal","Modelo Stepwise","Modelo Ridge","Modelo Lasso"),
+  c(aicM1,aicM2,aic_bicM3$AICc,aic_bicM4$AICc),
+  c(BIC(SNM_Model),BIC(SNMM_Model),aic_bicM3$BIC,aic_bicM4$BIC))
+colnames(dfMetricas)<-c("Modelos","AIC","BIC")
+knitr::kable(dfMetricas)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

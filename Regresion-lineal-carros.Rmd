@@ -1,0 +1,457 @@
+---
+title: "Regresión Lineal mtcars"
+output: html_document
+date: "2024-02-26"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r cargando paquetes, message=FALSE, warning=FALSE}
+library(GGally)
+library(nortest)
+library(glmnet) #Para regularización
+#install.packages("h2o")
+library(h2o)
+library(dplyr)
+library(tidyverse)
+```
+
+## Descripción variables carros
+
+```{r echo=FALSE}
+carros <- read.csv("./cars.csv")
+```
+
+***Número de filas:*** 205  
+***Número de atributos o columnas:*** 26 
+
+### Información de los atributos:  
+
+|Atributo:|Rango del atributo:|
+|--------:|:-------------------:|
+|1. symboling:|-3, -2, -1, 0, 1, 2, 3.|
+|2. normalized-losses:|numérico 65 hasta 256.|
+|3. make:|alfa-romero, audi, bmw, chevrolet, dodge, honda, isuzu, jaguar, mazda, mercedes-benz, mercury, mitsubishi, nissan, peugot, plymouth, porsche,  renault, saab, subaru, hastayota, volkswagen, volvo|
+|4. fuel-type:|diesel, gas.|
+|5. aspiration:|std, turbo.|
+|6. num-of-doors:|four, two.|
+|7. body-style:|hardtop, wagon, sedan, hatchback, convertible.|
+|8. drive-wheels:|4wd, fwd, rwd.|
+|9. engine-location:|front, rear.|
+|10. wheel-base:|numérico desde 86.6 hasta 120.9.|
+|11. length:|numérico desde 141.1 hasta 208.1.|
+|12. width:|numérico desde 60.3 hasta 72.3.|
+|13. height:|numérico desde 47.8 hasta 59.8.|
+|14. curb-weight:|numérico desde 1488 hasta 4066.|
+|15. engine-type:|dohc, dohcv, l, ohc, ohcf, ohcv, rotor.|
+|16. num-of-cylinders:|eight, five, four, six, three, twelve, two.|
+|17. engine-size:|numérico desde 61 to 326.|
+|18. fuel-system:|1bbl, 2bbl, 4bbl, idi, mfi, mpfi, spdi, spfi.|
+|19. bore:|numérico desde 2.54 hasta 3.94.|
+|20. stroke:|numérico desde 2.07 hasta 4.17.|
+|21. compression-ratio:|numérico desde 7 hasta 23.|
+|22. horsepower:|numérico desde 48 hasta 288.|
+|23. peak-rpm:|numérico desde 4150 hasta 6600.|
+|24. city-mpg:|numérico desde 13 hasta 49.|
+|25. highway-mpg:|numérico desde 16 hasta 54.|
+|26. price:|numérico desde 5118 hasta 45400.|
+
+
+```{r carros summary}
+summary(carros)
+```
+
+## Separamos variables numéricas de categóricas 
+
+
+```{r variables, echo=FALSE}
+colNum <- c("normalized_losses","wheel_base","length","width","curb_weight","engine_size", "bore","stroke","compression_ratio","horsepower","peak_rpm","city_mpg","highway_mpg","price")
+numericas<-carros[,colNum]
+```
+
+## Analizamos las numéricas
+```{r resumen de variables numericas}
+summary(numericas)
+```
+  
+El  `r (nrow(carros[is.na(carros$normalized_losses),])/nrow(carros))*100`% representan valores desconocidos, por lo que esta variable no se tomará en cuenta. El resto de las variables que presentan valores faltantes se completarán con la mediana para no alterar la distribución de los datos.  
+```{r sustituyendoNAs}
+numericas[is.na(numericas$bore),"bore"]<-median(numericas$bore,na.rm = T)
+numericas[is.na(numericas$stroke),"stroke"]<-median(numericas$stroke,na.rm = T)
+numericas[is.na(numericas$horsepower),"horsepower"]<-median(numericas$horsepower,na.rm = T)
+numericas[is.na(numericas$peak_rpm),"peak_rpm"]<-median(numericas$peak_rpm,na.rm = T)
+numericas[is.na(numericas$price),"price"]<-median(numericas$price,na.rm = T)
+numericas$normalized_losses<-NULL
+
+```
+
+### Analizamos correlación
+
+```{r correlacion, }
+ggpairs(numericas)
+```
+  
+## Variable Respuesta:
+
+La variable que se pretende predecir es el consumo por galón en ciudad (city_mpg). Como podemos ver esta variable está altamente relacionada con consumo por galón en carretera (highway_mpg). También podemos ver que hay multicolinealidad en algunos de los predictores.
+Separemos en conjuntos de entrenamiento y prueba.
+
+## Conjuntos de entrenamiento y prueba.   
+
+Se separarán en 70% de los datos en el conjunto de entrenamiento y 30% en el conjunto de prueba, usando un muestreo aleatorio simple.   
+
+```{r trainTest}
+set.seed(123)
+porciento <- 0.7
+corte <- sample(nrow(carros),nrow(carros)*porciento)
+train <- numericas[corte,]
+test <- numericas[-corte,]
+```
+  
+## Modelos
+
+### Modelo lineal múltiple  
+
+Haremos un modelo lineal múltiple usando todos los predictores.
+
+```{r MLM todos}
+modelo1 <- lm(city_mpg~.,data = train)
+summary(modelo1)
+```
+  
+
+En el resumen del modelo se puede observar que existen 6 predictores significativos, y que el modelo logra explicar el 96% de la varianza. ¿No será mucho?¿Estará sobreajustado?
+
+### Análisis de residuos  
+```{r residuosModelo1}
+plot(modelo1)
+```
+  
+Se puede ver que la varianza no es constante, aunque no se observan patrones en el gráfico de residuales sí se observa tendencia. En el gráfico q-q se observa que los residuos no parecen estar normalmente distribuidos y que hay puntos atípicos que pueden estar sesgando la distribución. Comprobaremos con un test de lilliefors si los residuos se distribuyen normalmente.  
+```{r lilliefors residuos modelo 1}
+lillie.test(modelo1$residuals)
+```
+
+  
+El p-valor es menor que 0.05 por lo que se rechaza la hipótesis nula de normalidad de los datos. Los residuos no están distribuidos normalmente.   
+El AIC del modelo1 es de `r AIC(modelo1)`. A pesar de que el modelo explica el 96% de la variablilidad de los datos, no parece ser un buen modelo pues se violan los supuestos en los residuos.  
+
+### Analizando errores de entrenamiento y prueba  
+```{r predicciones y errores de entrenamiento y prueba}
+predicciones_train <- predict(modelo1, newdata = train)
+predicciones_test <- predict(modelo1, newdata = test[,-11])
+
+training_mse <- mean((predicciones_train - train$city_mpg)^2)
+
+test_mse_ols <- mean((predicciones_test - test$city_mpg)^2)
+
+```
+El error (mse) de test es: `r test_mse_ols `
+El error (mse) de entrenamiento es: `r training_mse `  
+
+## Normalizando los datos
+  
+Dado que hay diferencias de escala en las variables por lo que vamos a normalizar los datos y hacer un modelo para ver si resulta mejor.  
+
+```{r normalizando train y test}
+train_normal <- as.data.frame(scale(train))
+test_normal <- as.data.frame(scale(test))
+```
+
+### Modelo 1.1. Modelo con todos los predictores y datos normalizados  
+
+
+```{r modelo 1}
+modelo1.1<-lm(city_mpg~.,data = train_normal)
+summary(modelo1.1)
+```
+  
+El modelo 1.1 explica el 96% de la variabilidad de los datos, analicemos los residuos.  
+
+#### Análisis de residuos modelo 1.1  
+
+```{r}
+plot(modelo1.1)
+```
+Como se observa en los gráficos, parece tener los mismos problemas que el modelo1 por lo que normalizar los datos no solucionó los problemas que tiene el modelo. El AIC de este modelo es: `r AIC(modelo1.1)` ¿Será que si seleccionamos los mejores predictores se pueda hacer un mejor modelo?
+
+## Selección de predictores. Stepwise 
+
+```{r stepwise}
+modelo2 <- step(
+              object    = lm(formula = city_mpg ~ ., data = train),
+              direction = "backward",
+              scope     = list(upper = ~., lower = ~1),
+              trace     = FALSE
+          )
+summary(modelo2)
+```
+  
+Como se puede leer en el resumen del modelo ahora todos los predictores son significativos, en el modelo 1 teníamos `r length(modelo2$coefficients)` y en el modelo1.1 con el subset tiene ahora `r length(modelo2$coefficients)`. 
+  
+#### Analizando residuales del modelo2
+```{r plot residuos modelo2}
+plot(modelo2)
+```
+  
+Se puede observar en las gráficas que no hay homocedasticidad en el modelo y probablemente no estén normalmente distribuidos los residuos.
+
+```{r normalidad de residuos modelo2}
+lillie.test(modelo2$residuals)
+```
+```{r predicciones y errores de entrenamiento y prueba modelo2}
+predicciones_train <- predict(modelo2, newdata = train)
+predicciones_test <- predict(modelo2, newdata = test[,-11])
+
+training_stepwise <- mean((predicciones_train - train$city_mpg)^2)
+
+test_mse_stepwise <- mean((predicciones_test - test$city_mpg)^2)
+
+```
+
+
+
+### Ridge
+
+Se hacen las matrices de entrenamiento y prueba para la regularización.  
+
+```{r Ridge matrices de entrenamiento y prueba}
+x_train <- model.matrix(city_mpg~., data = train)[, -1]
+y_train <- train$city_mpg
+
+x_test <- model.matrix(city_mpg~., data = test)[, -1]
+y_test <- test$city_mpg
+```
+
+Se hace la regularización con un 100 números de $\lambda$ porque no sabemos cual es el lambda adecuado.  
+```{r ridge}
+modelo3 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 0,
+            nlambda     = 100,
+            standardize = TRUE
+          )
+
+regularizacion <- modelo3$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = modelo3$lambda)
+
+regularizacion <- regularizacion %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+
+```
+
+
+```{r grafico de valores de lambda}
+regularizacion %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor)) +
+  geom_line() +
+  labs(title = "Coeficientes del modelo en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+Ahora hay que determinar cuál es el valor de lambda que resulta en el mejor modelo. Para eso vamos a usar validación cruzada:
+```{r tuneo de lambda modelo3}
+
+cv_error <- cv.glmnet(
+              x      = x_train,
+              y      = y_train,
+              alpha  = 0,
+              nfolds = 10,
+              type.measure = "mse",
+              standardize  = TRUE
+           )
+
+plot(cv_error)
+```
+
+Es posible encontrar el lambda que da un menor error ($\lambda$ = `r cv_error$lambda.min `), y el del modelo más sencillo que está a una desviación estandar del error mínimo ($\lambda$ = `r cv_error$lambda.1se `)
+
+Ahora hagamos un modelo con $\lambda$ = `r cv_error$lambda.1se `
+
+```{r modelo con mejor lambda}
+modelo3 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 0,
+            lambda      = cv_error$lambda.1se,
+            standardize = TRUE
+          )
+```
+
+  
+Podemos ver los predictores incluidos y sus coeficientes:
+
+```{r coeficientes del modelo 3}
+coef(modelo3)
+```
+
+```{r errores_ridge}
+# Predicciones de entrenamiento
+predicciones_train_modelo3<- predict(modelo3, newx = x_train)
+
+
+predicciones_test_modelo3 <- predict(modelo3, newx = x_test)
+
+# MSE de test
+test_mse_ridge_modelo3 <- mean((predicciones_test_modelo3 - y_test)^2)
+
+# MSE de entrenamiento
+training_mse_ridge_modelo3 <- mean((predicciones_train_modelo3 - y_train)^2)
+
+```
+El error (mse) de test es: `r test_mse_ridge_modelo3 `  
+El error (mse) de entrenamiento es: `r training_mse_ridge_modelo3 `    
+
+### Lasso
+
+Para Lasso hacemos lo mismo que con Ridge, solo especificamos el valor de $\alpha$.
+```{r lasso}
+modelo4 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 1,
+            nlambda     = 100,
+            standardize = TRUE
+          )
+
+regularizacion <- modelo4$beta %>% 
+                  as.matrix() %>%
+                  t() %>% 
+                  as_tibble() %>%
+                  mutate(lambda = modelo4$lambda)
+
+regularizacion <- regularizacion %>%
+                   pivot_longer(
+                     cols = !lambda, 
+                     names_to = "predictor",
+                     values_to = "coeficientes"
+                   )
+
+regularizacion %>%
+  ggplot(aes(x = lambda, y = coeficientes, color = predictor)) +
+  geom_line() +
+  labs(title = "Coeficientes del modelo en función de la regularización") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+  
+Veamos cual es el mejor valor de lambda:
+  
+```{r mejor lambda lasso}
+cv_error <- cv.glmnet(
+              x      = x_train,
+              y      = y_train,
+              alpha  = 1,
+              nfolds = 10,
+              type.measure = "mse",
+              standardize  = TRUE
+           )
+
+plot(cv_error)
+```
+
+Es posible encontrar el lambda que da un menor error ($\lambda$ = `r cv_error$lambda.min `), y el del modelo más sencillo que está a una desviación estandar del error mínimo ($\lambda$ = `r cv_error$lambda.1se `)
+
+Ahora hagamos un modelo con $\lambda$ = `r cv_error$lambda.1se `
+
+
+```{r mejor modelo lasso}
+modelo4 <- glmnet(
+            x           = x_train,
+            y           = y_train,
+            alpha       = 1,
+            lambda      = cv_error$lambda.1se,
+            standardize = TRUE
+          )
+coef(modelo4)
+```
+Como se puede ver solo nos quedamos con 3 predictores. Veamos como son los errores.
+
+```{r errores lasso}
+# Predicciones de entrenamiento
+predicciones_train_modelo4<- predict(modelo4, newx = x_train)
+
+
+predicciones_test_modelo4 <- predict(modelo4, newx = x_test)
+
+# MSE de test
+test_mse_lasso_modelo4 <- mean((predicciones_test_modelo4 - y_test)^2)
+
+# MSE de entrenamiento
+training_mse_lasso_modelo4 <- mean((predicciones_train_modelo4 - y_train)^2)
+
+```
+
+El error (mse) de test es: `r test_mse_lasso_modelo4 `  
+
+El error (mse) de entrenamiento es: `r training_mse_lasso_modelo4 `    
+
+## ¿Cuál es el mejor modelo?
+
+En este caso el que tiene menos error medio cuadrado es el modelo con el que se empleó stepwise regularization.
+
+```{r comparacion de modelos}
+df_comparacion <- data.frame(
+                    modelo = c("ols", "Stepwise", "Ridge", "Lasso"),
+                    mse    = c(test_mse_ols, test_mse_stepwise, test_mse_ridge_modelo3,
+                                test_mse_lasso_modelo4)
+)
+
+ggplot(data = df_comparacion, aes(x = modelo, y = mse)) +
+  geom_col(width = 0.5) +
+  geom_text(aes(label = round(mse, 2)), vjust = -0.1) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+  
+ Comprobemos que sucede con el AIC y el BIC.  
+ 
+```{r}
+#ara calcular el AIC en modelos glmnet
+fit = modelo3
+glmnet_cv_aicc <- function(fit, lambda = 'lambda.1se'){
+  tLL <- fit$nulldev - deviance(fit)
+  k <- fit$df
+  n <- fit$nobs
+  AICc <- -tLL+2*k+2*k*(k+1)/(n-k-1)
+  list('AICc' = AICc,'BIC' = log(n) * k - tLL)
+}
+aicM1<-AIC(modelo1)
+aicM2<-AIC(modelo2)
+aic_bicM3<-glmnet_cv_aicc(modelo3)
+aic_bicM4<-glmnet_cv_aicc(modelo4)
+
+dfMetricas<-data.frame(
+  c("Modelo Lineal","Modelo Stepwise","Modelo Ridge","Modelo Lasso"),
+  c(aicM1,aicM2,aic_bicM3$AICc,aic_bicM4$AICc),
+  c(BIC(modelo1),BIC(modelo2),aic_bicM3$BIC,aic_bicM4$BIC))
+colnames(dfMetricas)<-c("Modelos","AIC","BIC")
+knitr::kable(dfMetricas)
+```
+  
+Teniendo en cuenta que el modelo regularizado con stepwise tiene un menor error, y comparado con el modelo lineal múltiple, se usará este modelo para predecir.  
+
+En la siguiente gráfica vemos como quedarían las predicciones de acuerdo con los valores originales.  
+
+```{r prediccion con el mejor modelo}
+
+#Metrics::rmse(test$city_mpg,predicciones_test)
+plot(test$city_mpg,col="blue", main="Predicciones vs valores originales")
+points(predicciones_test, col="red")
+legend(30,45,legend=c("original", "prediccion"),col=c("blue", "red"),pch=1, cex=0.8)
+```
+
+
+

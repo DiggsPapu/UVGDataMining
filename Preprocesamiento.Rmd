@@ -1,0 +1,438 @@
+---
+title: "Preprocesamiento"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+Importación de librerías y asignación del working directory.
+```{r}
+## Asignar el working directory
+setwd('D:/UVG/CODING/Semestre7/MineriaDeDatos/UVGDataMining')
+# Aniadir librerias
+library(tidyr)
+install.packages("DataExplorer")
+library(DataExplorer)
+library(nortest)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(cluster) #Para calcular la silueta
+library(e1071)#para cmeans
+library(mclust) #mixtures of gaussians
+library(fpc) #para hacer el plotcluster
+library(NbClust) #Para determinar el número de clusters óptimo
+library(factoextra) #Para hacer gráficos bonitos de clustering
+library(hopkins) #Para revisar si vale la pena hacer agrupamiento
+library(GGally) #Para hacer el conjunto de graficos
+library(FeatureImpCluster) #Para revisar la importancia de las variables en los grupos.
+library(pheatmap) #Para hacer mapa de calor
+library(caret)
+library(glmnet) #Para regularización
+library(tidyverse)
+library(car)
+```
+
+## asignacion del dataset a trabajar
+```{r}
+train<-read.csv("./train.csv")
+create_report(
+  train,
+  output_file = "train_report.html",
+  output_dir = getwd(),
+  config = configure_report(),
+  report_title = "Houses Data Report"
+)
+```
+
+# PREPROCESAMIENTO
+```{r}
+View(train)
+### Explorar los datos nulos y las columnas con mucho dato nulo.
+count(train)
+```
+
+# Eliminar columnas invalidas
+```{r}
+#invalidos<-c( "PoolQC", "MiscFeature", "Alley", "Fence", "FireplaceQu", "GarageFinish", "GarageCond", "GarageQual", "GarageYrBlt", "GarageType", "LotFrontage")
+invalidos<-c( "PoolQC", "MiscFeature", "Alley", "Fence", "FireplaceQu")
+# Desarrollar nuevo explorador de datos
+train1<-train[,-which(names(train)%in% invalidos)]
+View(train1)
+```
+
+
+```{r}
+### Trabajar con variable GarageFinish
+table(train1$GarageFinish)
+names(table(train1$GarageFinish))[which.max(table(train1$GarageFinish))]
+plot(table(train$GarageFinish), main = "Frequencias GarageFinish Original", xlab = "Categorías de terminado de garage", ylab = "Frequency", col = "lightblue")
+train1$GarageFinish[is.na(train1$GarageFinish)] <- "Unf"
+plot(table(train1$GarageFinish), main = "Frequencias GarageFinish Modificado", xlab = "Categorías de terminado de garage", ylab = "Frequency", col = "lightblue")
+table(train1$GarageFinish)
+### Trabajar con variable GarageCond
+table(train1$GarageCond)
+names(table(train1$GarageCond))[which.max(table(train1$GarageCond))]
+plot(table(train$GarageCond), main = "Frequencias GarageCond Original", xlab = "Categorías de terminado de garage", ylab = "Frequency", col = "lightblue")
+train1$GarageCond[is.na(train1$GarageCond)] <- "TA"
+plot(table(train1$GarageCond), main = "Frequencias GarageCond Modificado", xlab = "Categorías de terminado de garage", ylab = "Frequency", col = "lightblue")
+table(train1$GarageCond)
+### Trabajar con las 5 a la vez.
+nrow(train[!is.na(train$GarageFinish) & !is.na(train$GarageCond) & !is.na(train$GarageQual) & !is.na(train$GarageYrBlt) & !is.na(train$GarageType),])
+train1<-train1[complete.cases(train1$GarageYrBlt),]
+nrow(train1)
+```
+
+
+```{r}
+### Electrical
+train1$Electrical
+nrow(train1[is.na(train1$Electrical),])
+distinct(train1,train1$Electrical,  .keep_all = FALSE)
+table(train1$Electrical)
+names(table(train1$Electrical))[which.max(table(train1$Electrical))]
+train1$Electrical[is.na(train1$Electrical)] <- names(table(train1$Electrical))[which.max(table(train1$Electrical))]
+### MasVnrArea
+train1$MasVnrArea
+nrow(train1[!is.na(train1$MasVnrArea),])
+mean(train1$MasVnrArea[!is.na(train1$MasVnrArea)])
+median(train$MasVnrArea[!is.na(train$MasVnrArea)])
+train1$MasVnrArea[is.na(train1$MasVnrArea)] <- median(train$MasVnrArea[!is.na(train$MasVnrArea)])
+plot(table(train$MasVnrArea), main = "Frequencias MasVnr Modificado", xlab = "Categorías de terminado de garage", ylab = "Frequency", col = "lightblue")
+table(train1$MasVnrArea)
+### MasVnrType
+train1$MasVnrType
+nrow(train1[is.na(train1$MasVnrType),])
+distinct(train1,train1$MasVnrType,  .keep_all = FALSE)
+table(train1$MasVnrType)
+names(table(train1$MasVnrType))[which.max(table(train1$MasVnrType))]
+train1$MasVnrType[is.na(train1$MasVnrType)] <- names(table(train1$MasVnrType))[which.max(table(train1$MasVnrType))]
+### LotFrontage
+train1$LotFrontage
+nrow(train1[is.na(train1$LotFrontage),])
+mean(train1$LotFrontage[!is.na(train1$LotFrontage)])
+median(train$LotFrontage[!is.na(train$LotFrontage)])
+train1$LotFrontage[is.na(train1$LotFrontage)] <- median(train$LotFrontage[!is.na(train$LotFrontage)])
+
+### BsmtFinType1
+train1$BsmtFinType1
+nrow(train1[!is.na(train1$BsmtFinType1),])
+### BsmtCond
+nrow(train1[!is.na(train1$BsmtCond),])
+### BsmtQual
+train1$BsmtQual
+nrow(train1[!is.na(train1$BsmtQual),])
+### BsmtFinType2
+train1$BsmtFinType2
+nrow(train1[!is.na(train1$BsmtFinType2),])
+### BsmtExposure
+train1$BsmtExposure
+nrow(train1[!is.na(train1$BsmtExposure),])
+### Work with all these
+nrow(train1[!is.na(train1$BsmtExposure) & !is.na(train1$BsmtFinType2) & !is.na(train1$BsmtQual) & !is.na(train1$BsmtCond) & !is.na(train1$BsmtFinType1),])
+train2<-train1[complete.cases(train1$BsmtExposure , train1$BsmtFinType2 , train1$BsmtQual , train1$BsmtCond , train1$BsmtFinType1),]
+nrow(train2)
+```
+
+# Reporte de datos final
+```{r}
+create_report(
+  train2,
+  output_file = "train_report2.html",
+  output_dir = getwd(),
+  config = configure_report(),
+  report_title = "Houses Data Report"
+)
+```
+
+## Calculo de coeficientes de correlacion de cada columna
+```{r}
+### Obtener las columnas numericas
+train2[, sapply(train2, is.numeric)]
+names(train2) # Nombres de las columnas
+cor(train2[, sapply(train2, is.numeric)]) # La correlacion de la tabla con los valores numericos
+cor(train2[, sapply(train2, is.numeric)], train2$SalePrice) # Obtener la correlacion entre todas las variables numericas y salesPrice
+```
+
+### Obtener un grafico entre salePrice y las variables categoricas
+```{r}
+#### Obtener todas las variables no numericas
+sapply(train2, is.numeric)
+
+# MSZoning
+ggplot(train2, aes(x = MSZoning, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by MSZoning",
+       x = "MSZoning",
+       y = "SalePrice")
+
+# Street
+ggplot(train2, aes(x = Street, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Street",
+       x = "Street",
+       y = "SalePrice")
+
+# LotShape
+ggplot(train2, aes(x = LotShape, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by LotShape",
+       x = "LotShape",
+       y = "SalePrice")
+
+# LandContour
+ggplot(train2, aes(x = LandContour, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by LandContour",
+       x = "LandContour",
+       y = "SalePrice")
+
+# Utilities
+ggplot(train2, aes(x = Utilities, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Utilities",
+       x = "Utilities",
+       y = "SalePrice")
+
+# LotConfig
+ggplot(train2, aes(x = LotConfig, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by LotConfig",
+       x = "LotConfig",
+       y = "SalePrice")
+
+# LandSlope
+ggplot(train2, aes(x = LandSlope, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by LandSlope",
+       x = "LandSlope",
+       y = "SalePrice")
+
+# Neighborhood
+ggplot(train2, aes(x = Neighborhood, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Neighborhood",
+       x = "Neighborhood",
+       y = "SalePrice")
+
+# Condition1
+ggplot(train2, aes(x = Condition1, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Condition1",
+       x = "Condition1",
+       y = "SalePrice")
+
+# Condition2
+ggplot(train2, aes(x = Condition2, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Condition2",
+       x = "Condition2",
+       y = "SalePrice")
+
+# BldgType
+ggplot(train2, aes(x = BldgType, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by BldgType",
+       x = "BldgType",
+       y = "SalePrice")
+
+# HouseStyle
+ggplot(train2, aes(x = HouseStyle, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by HouseStyle",
+       x = "HouseStyle",
+       y = "SalePrice")
+
+# RoofStyle
+ggplot(train2, aes(x = RoofStyle, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by RoofStyle",
+       x = "RoofStyle",
+       y = "SalePrice")
+
+# RoofMatl
+ggplot(train2, aes(x = RoofMatl, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by RoofMatl",
+       x = "RoofMatl",
+       y = "SalePrice")
+
+# Exterior1st
+ggplot(train2, aes(x = Exterior1st, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Exterior1st",
+       x = "Exterior1st",
+       y = "SalePrice")
+
+# Exterior2nd
+ggplot(train2, aes(x = Exterior2nd, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Exterior2nd",
+       x = "Exterior2nd",
+       y = "SalePrice")
+
+# MasVnrType
+ggplot(train2, aes(x = MasVnrType, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by MasVnrType",
+       x = "MasVnrType",
+       y = "SalePrice")
+
+# ExterQual
+ggplot(train2, aes(x = ExterQual, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by ExterQual",
+       x = "ExterQual",
+       y = "SalePrice")
+
+# ExterCond
+ggplot(train2, aes(x = ExterCond, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by ExterCond",
+       x = "ExterCond",
+       y = "SalePrice")
+
+# Foundation
+ggplot(train2, aes(x = Foundation, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Foundation",
+       x = "Foundation",
+       y = "SalePrice")
+
+# BsmtQual
+ggplot(train2, aes(x = BsmtQual, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by BsmtQual",
+       x = "BsmtQual",
+       y = "SalePrice")
+
+# BsmtCond
+ggplot(train2, aes(x = BsmtCond, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by BsmtCond",
+       x = "BsmtCond",
+       y = "SalePrice")
+
+# BsmtExposure
+ggplot(train2, aes(x = BsmtExposure, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by BsmtExposure",
+       x = "BsmtExposure",
+       y = "SalePrice")
+
+# BsmtFinType1
+ggplot(train2, aes(x = BsmtFinType1, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by BsmtFinType1",
+       x = "BsmtFinType1",
+       y = "SalePrice")
+
+# BsmtFinType2
+ggplot(train2, aes(x = BsmtFinType2, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by BsmtFinType2",
+       x = "BsmtFinType2",
+       y = "SalePrice")
+
+# Heating
+ggplot(train2, aes(x = Heating, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Heating",
+       x = "Heating",
+       y = "SalePrice")
+
+# HeatingQC
+ggplot(train2, aes(x = HeatingQC, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by HeatingQC",
+       x = "HeatingQC",
+       y = "SalePrice")
+
+# CentralAir
+ggplot(train2, aes(x = CentralAir, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by CentralAir",
+       x = "CentralAir",
+       y = "SalePrice")
+
+# Electrical
+ggplot(train2, aes(x = Electrical, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Electrical",
+       x = "Electrical",
+       y = "SalePrice")
+
+# KitchenQual
+ggplot(train2, aes(x = KitchenQual, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by KitchenQual",
+       x = "KitchenQual",
+       y = "SalePrice")
+
+# Functional
+ggplot(train2, aes(x = Functional, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by Functional",
+       x = "Functional",
+       y = "SalePrice")
+
+# GarageType
+ggplot(train2, aes(x = GarageType, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by GarageType",
+       x = "GarageType",
+       y = "SalePrice")
+
+# GarageFinish
+ggplot(train2, aes(x = GarageFinish, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by GarageFinish",
+       x = "GarageFinish",
+       y = "SalePrice")
+
+# GarageQual
+ggplot(train2, aes(x = GarageQual, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by GarageQual",
+       x = "GarageQual",
+       y = "SalePrice")
+
+# GarageCond
+ggplot(train2, aes(x = GarageCond, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by GarageCond",
+       x = "GarageCond",
+       y = "SalePrice")
+
+# PavedDrive
+ggplot(train2, aes(x = PavedDrive, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by PavedDrive",
+       x = "PavedDrive",
+       y = "SalePrice")
+
+# SaleType
+ggplot(train2, aes(x = SaleType, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by SaleType",
+       x = "SaleType",
+       y = "SalePrice")
+
+# SaleCondition
+ggplot(train2, aes(x = SaleCondition, y = SalePrice)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of SalePrice by SaleCondition",
+       x = "SaleCondition",
+       y = "SalePrice")
+```
+```{r}
+columns <- c(sapply(train2, is.numeric))
+train2[is.na(columns),]
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
