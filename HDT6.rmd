@@ -19,6 +19,7 @@ testHDT6<-testCompleto
 ```
 # Crear las variables dicotomicas
 ```{r}
+head(trainHDT6Dicotomicas)
 trainHDT6Dicotomicas<-trainHDT6%>%
   mutate(Category = Category,
          valor_category = 1
@@ -30,7 +31,8 @@ testHDT6Dicotomicas<-testHDT6%>%
          ) %>% 
   spread(key = Category, value = valor_category, fill = 0)
 ```
-# Crear el modelo logistico para determinar si es caro o no con todas las columnas
+# No validacion cruzada
+## Crear el modelo logistico para determinar si es caro o no con todas las columnas
 ```{r}
 modeloLogistico <- glm(
   Cara~ MSSubClass + LotFrontage + LotArea + OverallQual + OverallCond + YearBuilt + YearRemodAdd + MasVnrArea + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF + X1stFlrSF + X2ndFlrSF + LowQualFinSF + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath + BedroomAbvGr + KitchenAbvGr + TotRmsAbvGrd + Fireplaces + GarageYrBlt + GarageCars + GarageArea + WoodDeckSF + OpenPorchSF + EnclosedPorch + X3SsnPorch + ScreenPorch + PoolArea + MiscVal + MoSold + YrSold,
@@ -39,15 +41,48 @@ modeloLogistico <- glm(
   na.action = na.exclude
 )
 summary(modeloLogistico)
+BIC(modeloLogistico$finalModel)
 ```
 Se observa que MSSubClass, OverallQual, YearBuilt, YearRemodAdd, X1stFlrSF, X2ndFlrSF, BsmtFullBath, PoolArea son significativos para el modelo mientras que las demas variables no lo son.
 El AIC es de 607.51. 
 
-# Pruebas de prediccion
+## Pruebas de prediccion
 ```{r}
 pred <- predict(modeloLogistico,newdata = testHDT6Dicotomicas[,c("Id","MSSubClass"    ,"LotFrontage"   ,"LotArea", "OverallQual"  , "OverallCond"  , "YearBuilt"    , "YearRemodAdd", "MasVnrArea"   , "BsmtFinSF1"   , "BsmtFinSF2"   , "BsmtUnfSF", "X1stFlrSF"    , "X2ndFlrSF"    , "LowQualFinSF", "BsmtFullBath" , "BsmtHalfBath" , "FullBath", "HalfBath"     , "BedroomAbvGr" , "KitchenAbvGr" , "TotRmsAbvGrd", "Fireplaces"   , "GarageYrBlt"  , "GarageCars"   , "GarageArea", "WoodDeckSF"   , "OpenPorchSF"  , "EnclosedPorch", "X3SsnPorch", "ScreenPorch"  , "PoolArea"     , "MiscVal"      , "MoSold", "YrSold")])
 pred <- ifelse(pred>=0.5,1,0)
 head(pred)
+```
+# Matriz de confusion
+```{r}
+caret::confusionMatrix(as.factor(pred),as.factor(testHDT6Dicotomicas$Cara))
+```
+# Multicolinealidad
+```{r}
+View(round(cor(trainHDT6Dicotomicas),2))
+```
+No se observa ninguna multicolinealidad entre las variables.
+
+# Validacion cruzada
+## Modelo de validacion cruzada
+```{r}
+cv <- trainControl(method="cv", 
+                          number=150)
+modelo_todas_cv <- caret::train(
+  Cara~MSSubClass + LotFrontage + LotArea + OverallQual + OverallCond + YearBuilt + YearRemodAdd + MasVnrArea + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF + X1stFlrSF + X2ndFlrSF + LowQualFinSF + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath + BedroomAbvGr + KitchenAbvGr + TotRmsAbvGrd + Fireplaces + GarageYrBlt + GarageCars + GarageArea + WoodDeckSF + OpenPorchSF + EnclosedPorch + X3SsnPorch + ScreenPorch + PoolArea + MiscVal + MoSold + YrSold,
+  data=trainHDT6Dicotomicas,
+  method="glm",
+  family = binomial,
+  trControl = cv)
+summary(modelo_todas_cv)
+BIC(modelo_todas_cv$finalModel)
+```
+Se observa que las variables que realmente aportan al modelo son OverallQual, YearBuilt, X1stFlrSF, X2ndFlrSF, PoolArea
+El AIC es de 606.54 por lo que no mejora significativamente, así mismo el BIC es de 780.8058.
+## Pruebas de prediccion
+```{r}
+predVC <- predict(modelo_todas_cv,newdata = testHDT6Dicotomicas[,c("Id","MSSubClass"    ,"LotFrontage"   ,"LotArea", "OverallQual"  , "OverallCond"  , "YearBuilt"    , "YearRemodAdd", "MasVnrArea"   , "BsmtFinSF1"   , "BsmtFinSF2"   , "BsmtUnfSF", "X1stFlrSF"    , "X2ndFlrSF"    , "LowQualFinSF", "BsmtFullBath" , "BsmtHalfBath" , "FullBath", "HalfBath"     , "BedroomAbvGr" , "KitchenAbvGr" , "TotRmsAbvGrd", "Fireplaces"   , "GarageYrBlt"  , "GarageCars"   , "GarageArea", "WoodDeckSF"   , "OpenPorchSF"  , "EnclosedPorch", "X3SsnPorch", "ScreenPorch"  , "PoolArea"     , "MiscVal"      , "MoSold", "YrSold")])
+predVC <- ifelse(predVC>=0.5,1,0)
+head(predVC)
 ```
 # Matriz de confusion
 ```{r}
