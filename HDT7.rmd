@@ -7,7 +7,7 @@ Importación de librerías
 ```{r}
 library(e1071)
 library(caret)
-# install.packages("tidyverse")
+install.packages("tidyverse")
 library(tidyverse)
 ```
 
@@ -24,13 +24,39 @@ colnames(testHDT7)
 # Crear los modelos
 ## Modelo lineal
 ```{r}
-svm_model1<-svm(Category~.,data = trainHDT7, kernel="linear",scale = T)
+control <- trainControl(method = "cv",number = 10)
+c <- expand.grid(cost = c(0.01, 0.1, 1, 5,16,32))
+svm_model1<- train(species~.,
+      data=train,
+      method="svmLinear2",
+      tuneGrid=c,
+      trControl=control,
+      metric="Accuracy"
+)
+svm_model1
 pred_svm_model1<-predict(svm_model1,testHDT7)
 confusionMatrix(testHDT7$predRF,pred_svm_model1)
 ```
-## Modelo 
+## Modelo Polinomial
 ```{r}
-svm_model1<-svm(Category~.,data = trainHDT7, kernel="linear",scale = T)
+params <- expand.grid(C = c(0.01, 0.1, 1, 5,16,32),degree=c(2,3,5,7),scale=c(0.01,0.1,1))
+svm_model2<- train(Category~.,
+      data=trainHDT7,
+      method="svmPoly",
+      tuneGrid=params,
+      trControl=control,
+      metric="Accuracy"
+)
+svm_model2
+pred_svm_model2<-predict(svm_model2,testHDT7)
+confusionMatrix(testHDT7$predRF,pred_svm_model2)
+
+```
+## Modelo Radial
+```{r}
+params <- expand.grid(C = c(0.01, 0.1, 1, 5,16,32),sigma=c(0.0000000002,0.00002,0.01,0.1,20,200))
+svm_model3<- train(Category~.,data=trainHDT7,method="svmRadial",tuneGrid=params,trControl=control,metric="Accuracy")
+svm_model3
 pred_svm_model1<-predict(svm_model1,testHDT7)
 confusionMatrix(testHDT7$predRF,pred_svm_model1)
 ```
