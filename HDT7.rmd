@@ -7,29 +7,32 @@ Importación de librerías
 ```{r}
 library(e1071)
 library(caret)
-install.packages("tidyverse")
+# install.packages("tidyverse")
 library(tidyverse)
 ```
 
 Preprocesamiento: [Ver HDT3]
 ```{r}
 # Utilizar los mismos conjuntos de entrenamiento y de prueba
-trainHDT6<-trainHDT4
-testHDT6<-testCompleto
+trainHDT7<-trainHDT4
+testHDT7<-testCompleto
+# Making a multiple level factor
+trainHDT7$Category <- as.factor(trainHDT7$Category)
+testHDT7$predRF <- as.factor(testHDT7$predRF)
+colnames(testHDT7)
 ```
-# Crear las variables dicotomicas
+# Crear los modelos
+## Modelo lineal
 ```{r}
-head(trainHDT6Dicotomicas)
-trainHDT6Dicotomicas<-trainHDT6%>%
-  mutate(Category = Category,
-         valor_category = 1
-         ) %>% 
-  spread(key = Category, value = valor_category, fill = 0)
-testHDT6Dicotomicas<-testHDT6%>%
-  mutate(Category = Category,
-         valor_category = 1
-         ) %>% 
-  spread(key = Category, value = valor_category, fill = 0)
+svm_model1<-svm(Category~.,data = trainHDT7, kernel="linear",scale = T)
+pred_svm_model1<-predict(svm_model1,testHDT7)
+confusionMatrix(testHDT7$predRF,pred_svm_model1)
+```
+## Modelo 
+```{r}
+svm_model1<-svm(Category~.,data = trainHDT7, kernel="linear",scale = T)
+pred_svm_model1<-predict(svm_model1,testHDT7)
+confusionMatrix(testHDT7$predRF,pred_svm_model1)
 ```
 # No validacion cruzada
 ## Crear el modelo logistico para determinar si es caro o no con todas las columnas
