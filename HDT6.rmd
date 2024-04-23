@@ -7,25 +7,60 @@ Importación de librerías
 ```{r}
 library(e1071)
 library(caret)
-install.packages("tidyverse")
 library(tidyverse)
+library(dplyr)
+library(mlr)
+library(ggplot2)
+library(caret)
+library(glmnet)
 ```
 
 Preprocesamiento: [Ver HDT3]
 ```{r}
 # Utilizar los mismos conjuntos de entrenamiento y de prueba
-trainHDT6<-trainHDT4
-testHDT6<-testCompleto
+train2
+columns <- c(sapply(train2, is.numeric))
+trainHDT4 <- train2[,columns]
+
+trainHDT4<-trainHDT4[complete.cases(trainHDT4), ]
+
+# Calcula la media y la desviación estándar
+media <- mean(trainHDT4$SalePrice)
+desvEst <- sd(trainHDT4$SalePrice)
+
+# Número de desviaciones estándar para considerar
+nDesvEst <- 1
+
+# Filtra los datos para eliminar atípicos
+trainHDT4 <- trainHDT4 %>% 
+  filter(SalePrice >= (media - nDesvEst * desvEst) & SalePrice <= (media + nDesvEst * desvEst))
+
+corte <- sample(nrow(trainHDT4),nrow(trainHDT4)*0.7)
+train_copy<-trainHDT4[corte,]
+test_copy<-trainHDT4[-corte,]
+
+train_copy<-as.data.frame(scale(train_copy))
+test_copy<-as.data.frame(scale(test_copy))
 ```
+Agregando variable de respuesta
+```{r}
+trainHDT4$Category <- ifelse(trainHDT4$SalePrice <= 137500, "Economica",
+                           ifelse(trainHDT4$SalePrice <= 196875, "Intermedia", "Cara"))
+trainHDT4 <- trainHDT4[, -which(names(trainHDT4) == "SalePrice")]
+
+corte <- sample(nrow(trainHDT4),nrow(trainHDT4)*0.7)
+train_copy<-trainHDT4[corte,]
+test_copy<-trainHDT4[-corte,]
+```
+
 # Crear las variables dicotomicas
 ```{r}
-head(trainHDT6Dicotomicas)
-trainHDT6Dicotomicas<-trainHDT6%>%
+trainHDT6Dicotomicas<-train_copy%>%
   mutate(Category = Category,
          valor_category = 1
          ) %>% 
   spread(key = Category, value = valor_category, fill = 0)
-testHDT6Dicotomicas<-testHDT6%>%
+testHDT6Dicotomicas<-test_copy%>%
   mutate(Category = Category,
          valor_category = 1
          ) %>% 
@@ -41,10 +76,10 @@ modeloLogistico <- glm(
   na.action = na.exclude
 )
 summary(modeloLogistico)
-BIC(modeloLogistico$finalModel)
+BIC(modeloLogistico)
 ```
 Se observa que MSSubClass, OverallQual, YearBuilt, YearRemodAdd, X1stFlrSF, X2ndFlrSF, BsmtFullBath, PoolArea son significativos para el modelo mientras que las demas variables no lo son.
-El AIC es de 607.51. 
+El AIC es de 471.09 y el BIC es de 623.
 
 ## Pruebas de prediccion
 ```{r}
@@ -60,7 +95,6 @@ caret::confusionMatrix(as.factor(pred),as.factor(testHDT6Dicotomicas$Cara))
 ```{r}
 View(round(cor(trainHDT6Dicotomicas),2))
 ```
-No se observa ninguna multicolinealidad entre las variables.
 
 # Validacion cruzada
 ## Modelo de validacion cruzada
@@ -77,7 +111,7 @@ summary(modelo_todas_cv)
 BIC(modelo_todas_cv$finalModel)
 ```
 Se observa que las variables que realmente aportan al modelo son OverallQual, YearBuilt, X1stFlrSF, X2ndFlrSF, PoolArea
-El AIC es de 606.54 por lo que no mejora significativamente, así mismo el BIC es de 780.8058.
+El AIC es de 471.09 por lo que no mejora significativamente, así mismo el BIC es de 632.84.
 ## Pruebas de prediccion
 ```{r}
 predVC <- predict(modelo_todas_cv,newdata = testHDT6Dicotomicas[,c("Id","MSSubClass"    ,"LotFrontage"   ,"LotArea", "OverallQual"  , "OverallCond"  , "YearBuilt"    , "YearRemodAdd", "MasVnrArea"   , "BsmtFinSF1"   , "BsmtFinSF2"   , "BsmtUnfSF", "X1stFlrSF"    , "X2ndFlrSF"    , "LowQualFinSF", "BsmtFullBath" , "BsmtHalfBath" , "FullBath", "HalfBath"     , "BedroomAbvGr" , "KitchenAbvGr" , "TotRmsAbvGrd", "Fireplaces"   , "GarageYrBlt"  , "GarageCars"   , "GarageArea", "WoodDeckSF"   , "OpenPorchSF"  , "EnclosedPorch", "X3SsnPorch", "ScreenPorch"  , "PoolArea"     , "MiscVal"      , "MoSold", "YrSold")])
@@ -86,5 +120,96 @@ head(predVC)
 ```
 # Matriz de confusion
 ```{r}
+caret::confusionMatrix(as.factor(predVC),as.factor(testHDT6Dicotomicas$Cara))
+```
+```{r}
+trainHDT6Dicotomicas$Cara <- as.factor(trainHDT6Dicotomicas$Cara)
+datos.task = makeClassifTask(data = trainHDT6Dicotomicas, target = "Cara")
+rin2 = makeResampleDesc(method = "CV", iters = 10, predict = "both")
+lrn = makeLearner("classif.multinom", predict.type = "prob", trace = FALSE)
+lc2 = generateLearningCurveData(learners = lrn, task = datos.task,
+                                percs = seq(0.1, 1, by = 0.1),
+                                measures = list(ber, setAggregation(ber, train.mean)), resampling = rin2,
+                                show.info = FALSE)
+plotLearningCurve(lc2, facet = "learner")
+```
+
+## Modelo de validacion cruzada tuneado
+```{r}
+cv <- trainControl(method="cv", 
+                          number=150)
+modelo_tuneado <- caret::train(
+  Cara~MSSubClass + OverallQual + OverallCond + YearBuilt + YearRemodAdd + X1stFlrSF + X2ndFlrSF  + BsmtFullBath + GarageYrBlt + PoolArea,
+  data=trainHDT6Dicotomicas,
+  method="glm",
+  family = "binomial",
+  trControl = cv)
+summary(modelo_tuneado)
+BIC(modelo_tuneado$finalModel)
+```
+## Pruebas de prediccion
+```{r}
+pred <- predict(modelo_tuneado,newdata = testHDT6Dicotomicas[,c("Id","MSSubClass"    , "OverallQual"  , "OverallCond"  , "YearBuilt"    , "YearRemodAdd", "X1stFlrSF"    , "X2ndFlrSF"    , "BsmtFullBath" ,  "GarageYrBlt"  , "PoolArea")])
+pred <- ifelse(predVC>=0.5,1,0)
+head(pred)
+```
+# Matriz de confusion
+```{r}
 caret::confusionMatrix(as.factor(pred),as.factor(testHDT6Dicotomicas$Cara))
+```
+# Rendimiento computacional
+## Modelo 1
+```{r}
+Rprof(memory.profiling = TRUE)
+  modeloLogistico <- glm(
+  Cara~ MSSubClass + LotFrontage + LotArea + OverallQual + OverallCond + YearBuilt + YearRemodAdd + MasVnrArea + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF + X1stFlrSF + X2ndFlrSF + LowQualFinSF + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath + BedroomAbvGr + KitchenAbvGr + TotRmsAbvGrd + Fireplaces + GarageYrBlt + GarageCars + GarageArea + WoodDeckSF + OpenPorchSF + EnclosedPorch + X3SsnPorch + ScreenPorch + PoolArea + MiscVal + MoSold + YrSold,
+  data = trainHDT6Dicotomicas,
+  family = binomial(),
+  na.action = na.exclude
+)
+Rprof(NULL)
+pm1<-summaryRprof(memory = "both")
+pm1$sampling.time
+```
+## Modelo 2
+```{r}
+Rprof(memory.profiling = TRUE)
+cv <- trainControl(method="cv", 
+                          number=150)
+modelo_todas_cv <- caret::train(
+  Cara~MSSubClass + LotFrontage + LotArea + OverallQual + OverallCond + YearBuilt + YearRemodAdd + MasVnrArea + BsmtFinSF1 + BsmtFinSF2 + BsmtUnfSF + X1stFlrSF + X2ndFlrSF + LowQualFinSF + BsmtFullBath + BsmtHalfBath + FullBath + HalfBath + BedroomAbvGr + KitchenAbvGr + TotRmsAbvGrd + Fireplaces + GarageYrBlt + GarageCars + GarageArea + WoodDeckSF + OpenPorchSF + EnclosedPorch + X3SsnPorch + ScreenPorch + PoolArea + MiscVal + MoSold + YrSold,
+  data=trainHDT6Dicotomicas,
+  method="glm",
+  family = binomial,
+  trControl = cv)
+Rprof(NULL)
+pm2<-summaryRprof(memory = "both")
+pm2$sampling.time
+```
+## Modelo 3
+```{r}
+Rprof(memory.profiling = TRUE)
+cv <- trainControl(method="cv", 
+                          number=150)
+modelo_tuneado <- caret::train(
+  Cara~MSSubClass + OverallQual + OverallCond + YearBuilt + YearRemodAdd + X1stFlrSF + X2ndFlrSF  + BsmtFullBath + GarageYrBlt + PoolArea,
+  data=trainHDT6Dicotomicas,
+  method="glm",
+  family = "binomial",
+  trControl = cv)
+Rprof(NULL)
+pm3<-summaryRprof(memory = "both")
+pm3$sampling.time
+```
+## Comparacion tiempos 
+```{r}
+pm1$sampling.time
+pm2$sampling.time
+pm3$sampling.time
+```
+## Comparacion de memoria
+```{r}
+sum(pm1$by.total$mem.total)
+sum(pm2$by.total$mem.total)
+sum(pm3$by.total$mem.total)
 ```
