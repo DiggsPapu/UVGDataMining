@@ -21,11 +21,28 @@ trainHDT8<-trainHDT4
 testHDT8<-testCompleto
 ```
 ```{r}
-modeloCaret <- train(Category~., data=trainHDT8, method="nnet", trace=F)
-colnames(testHDT8)
-colnames(trainHDT8)
-testHDT8$prediccionCaret<-predict(modeloCaret, newdata = testHDT8[,1:38])
-cfmCaret<-confusionMatrix(testHDT8$prediccionCaret,testHDT8$Category)
+# Matriz de tuneo
+tuneGrid <- expand.grid(size = c(5, 15), decay = c(1, 0.1, 0.01, 0.001, 10))
+
+# Parametros de control
+ctrl <- trainControl(method = "cv",  # cross validation
+                     number = 100, # Numero de iteraciones     
+                    #  verboseIter = TRUE # Impresiones
+                     ) 
+
+# Train the model with tuning
+modeloCaret <- train(Category ~ ., 
+                     data = trainHDT8, 
+                     method = "nnet", 
+                     trControl = ctrl, 
+                     tuneGrid = tuneGrid,
+                     trace = FALSE)
+
+# Make predictions on the test set
+testHDT8$prediccionCaret <- predict(modeloCaret, newdata = testHDT8[,1:38])
+
+# Calculate confusion matrix
+cfmCaret <- confusionMatrix(testHDT8$prediccionCaret, testHDT8$Category)
 cfmCaret
 
 ```
