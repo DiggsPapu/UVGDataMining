@@ -1,0 +1,31 @@
+---
+title: "Preprocesamiento"
+output: html_notebook
+---
+
+```{r}
+install.packages("nnet")
+install.packages("RWeka")
+install.packages("neuralnet")
+library(caret)
+library(nnet)
+library(RWeka)
+library(neural)
+library(dummy)
+library(neuralnet)
+
+```
+```{r}
+# Utilizar los mismos conjuntos de entrenamiento y de prueba
+trainHDT8<-trainHDT4
+testHDT8<-testCompleto
+```
+```{r}
+modeloCaret <- train(Category~., data=trainHDT8, method="nnet", trace=F)
+colnames(testHDT8)
+colnames(trainHDT8)
+testHDT8$prediccionCaret<-predict(modeloCaret, newdata = testHDT8[,1:38])
+cfmCaret<-confusionMatrix(testHDT8$prediccionCaret,testHDT8$Category)
+cfmCaret
+
+```
